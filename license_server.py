@@ -1,89 +1,92 @@
-from flask import Flask, request, jsonify, render_template_string, abort
+from flask import Flask, request, jsonify, render_template_string, redirect
 import json
 import os
 from datetime import datetime
-from functools import wraps
 
 app = Flask(__name__)
-KEY_FILE = "keys.json"
-ADMIN_PASSWORD = "LuckyNumber9@18"  # Change this
 
-# Load or initialize keys
-if os.path.exists(KEY_FILE):
-    with open(KEY_FILE, "r") as f:
-        licenses = json.load(f)
-else:
-    licenses = {}
+LICENSE_FILE = "keys.json"
+ADMIN_PASSWORD = "LuckyNumber9@18"  # Update to your own password if needed
 
-# Save helper
-def save_keys():
-    with open(KEY_FILE, "w") as f:
-        json.dump(licenses, f, indent=4)
 
-# === Admin Auth Decorator ===
-def require_password(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        pw = request.args.get("pw")
-        if pw != ADMIN_PASSWORD:
-            return "Access denied", 403
-        return f(*args, **kwargs)
-    return decorated
-
-# === LICENSE CHECK ===
+# --------------------------
+# License Verification Route
+# --------------------------
 @app.route("/verify", methods=["POST"])
 def verify():
-    data = request.get_json()
-    if not data or "key" not in data or "hwid" not in data:
-        return jsonify({"error": "Invalid request"}), 400
+    try:
+        data = request.get_json()
+        key = data.get("key")
+        hwid = data.get("hwid")
 
-    key = data["key"]
-    hwid = data["hwid"]
-    lic = licenses.get(key)
+        with open(LICENSE_FILE, "r") as f:
+            licenses = json.load(f)
 
-    if not lic or lic["hwid"] != hwid:
-        return jsonify({"valid": False}), 403
+        for lic in licenses:
+            if lic["key"] == key and lic["hwid"] == hwid:
+                # Optional expiration check
+                exp = lic.get("expiration")
+                if exp:
+                    try:
+                        exp_time = datetime.fromisoformat(exp)
+                        if datetime.utcnow() > exp_time:
+                            return jsonify({"status": "expired"})
+                    except ValueError:
+                        return jsonify({"status": "error", "reason": "bad_expiration_format"})
+                return jsonify({"status": "valid"})
 
-    # Check expiration
-    if "expires" in lic and lic["expires"]:
-        try:
-            exp = datetime.fromisoformat(lic["expires"])
-            if exp < datetime.utcnow():
-                return jsonify({"valid": False, "error": "Expired"}), 403
-        except Exception:
-            return jsonify({"error": "Invalid expiration format"}), 500
+        return jsonify({"status": "invalid"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
 
-    return jsonify({"valid": True})
 
-# === ADMIN PANEL ===
+# --------------------------
+# Admin Panel (Add Keys)
+# --------------------------
 @app.route("/admin", methods=["GET", "POST"])
-@require_password
 def admin():
+    if request.args.get("pw") != ADMIN_PASSWORD:
+        return "Access denied", 403
+
     if request.method == "POST":
         key = request.form.get("key")
         hwid = request.form.get("hwid")
-        exp = request.form.get("expires")
+        expiration = request.form.get("expiration")
 
-        if not key or not hwid:
-            return "Missing key or HWID", 400
+        # Load or initialize license data
+        try:
+            with open(LICENSE_FILE, "r") as f:
+                licenses = json.load(f)
+        except Exception:
+            licenses = []
 
-        licenses[key] = {
-            "hwid": hwid,
-            "expires": exp if exp else None
-        }
-        save_keys()
-        return "Key added successfully."
+        new_entry = {"key": key, "hwid": hwid}
+        if expiration:
+            new_entry["expiration"] = expiration
 
-    return render_template_string('''
-        <h2>License Admin Panel</h2>
-        <form method="post">
-            Key: <input name="key"><br>
-            HWID: <input name="hwid"><br>
-            Expiration (optional ISO): <input name="expires"><br>
-            <input type="submit" value="Add Key">
-        </form>
-    ''')
+        licenses.append(new_entry)
 
+        with open(LICENSE_FILE, "w") as f:
+            json.dump(licenses, f, indent=4)
+
+        return redirect("/admin?pw=" + ADMIN_PASSWORD)
+
+    # Render HTML form
+    html = """
+    <h2>License Admin Panel</h2>
+    <form method="post">
+        Key: <input name="key"><br>
+        HWID: <input name="hwid"><br>
+        Expiration (optional ISO): <input name="expiration" value="{default_exp}"><br>
+        <button type="submit">Add Key</button>
+    </form>
+    """
+    default_exp = datetime.utcnow().replace(microsecond=0).isoformat()
+    return render_template_string(html.format(default_exp=default_exp))
+
+
+# --------------------------
+# Run Locally (optional)
+# --------------------------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-
+    app.run(debug=True)
