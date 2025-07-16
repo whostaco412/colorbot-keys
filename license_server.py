@@ -68,16 +68,55 @@ def admin():
         save_keys(keys)
         return "Key added successfully."
 
-    # Admin panel form
     return render_template_string("""
     <h2>License Admin Panel</h2>
     <form method="post">
+        <h3>Add / Update Key</h3>
         Key: <input name="key"><br>
         HWID: <input name="hwid"><br>
         Expiration (optional ISO): <input name="expires" value="2025-07-30T00:00:00"><br>
         <input type="submit" value="Add Key">
     </form>
-    """)
+
+    <hr>
+
+    <form action="/admin/delete?pw={{pw}}" method="post">
+        <h3>Delete Key</h3>
+        Key to Delete: <input name="key"><br>
+        <input type="submit" value="Delete Key">
+    </form>
+
+    <hr>
+    <a href="/admin/list?pw={{pw}}">View All Keys</a>
+    """, pw=pw)
+
+@app.route('/admin/delete', methods=['POST'])
+def delete_key():
+    pw = request.args.get("pw")
+    if pw != ADMIN_PASSWORD:
+        return "Unauthorized", 401
+
+    key = request.form.get("key")
+    keys = load_keys()
+
+    if key in keys:
+        del keys[key]
+        save_keys(keys)
+        return f"Key '{key}' deleted."
+    return "Key not found."
+
+@app.route('/admin/list', methods=['GET'])
+def list_keys():
+    pw = request.args.get("pw")
+    if pw != ADMIN_PASSWORD:
+        return "Unauthorized", 401
+
+    keys = load_keys()
+    html = "<h2>All License Keys</h2><ul>"
+    for k, v in keys.items():
+        html += f"<li><b>{k}</b> - HWID: {v['hwid']} - Expires: {v.get('expires', 'None')}</li>"
+    html += "</ul>"
+    return html
 
 if __name__ == '__main__':
     app.run(debug=True)
