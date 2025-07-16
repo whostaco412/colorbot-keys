@@ -40,12 +40,8 @@ def verify():
         return jsonify({"status": "error", "message": "HWID mismatch"}), 403
 
     if "expires" in lic:
-        try:
-            expiry = datetime.fromisoformat(lic["expires"])
-            if datetime.utcnow() > expiry:
-                return jsonify({"status": "error", "message": "Key expired"}), 403
-        except ValueError:
-            return jsonify({"status": "error", "message": "Invalid expiration date format"}), 400
+        if datetime.utcnow() > datetime.fromisoformat(lic["expires"]):
+            return jsonify({"status": "error", "message": "Key expired"}), 403
 
     return jsonify({"status": "success", "message": "License valid"})
 
@@ -65,33 +61,28 @@ def admin():
 
         keys = load_keys()
         keys[key] = {"hwid": hwid}
-
         if expires:
             keys[key]["expires"] = expires
-
         save_keys(keys)
         return "Key added successfully."
 
     return render_template_string("""
-    <h2>License Admin Panel</h2>
-    <form method="post">
-        <h3>Add / Update Key</h3>
-        Key: <input name="key"><br>
-        HWID: <input name="hwid"><br>
-        Expiration (optional ISO): <input name="expires" value="2025-07-30T00:00:00"><br>
-        <input type="submit" value="Add Key">
-    </form>
-
-    <hr>
-
-    <form action="/admin/delete?pw={{pw}}" method="post">
-        <h3>Delete Key</h3>
-        Key to Delete: <input name="key"><br>
-        <input type="submit" value="Delete Key">
-    </form>
-
-    <hr>
-    <a href="/admin/list?pw={{pw}}">View All Keys</a>
+        <h2>License Admin Panel</h2>
+        <form method="post">
+            <h3>Add / Update Key</h3>
+            Key: <input name="key"><br>
+            HWID: <input name="hwid"><br>
+            Expiration (optional ISO): <input name="expires" value="2025-07-30T00:00:00"><br>
+            <input type="submit" value="Add Key">
+        </form>
+        <hr>
+        <form action="/admin/delete?pw={{pw}}" method="post">
+            <h3>Delete Key</h3>
+            Key to Delete: <input name="key"><br>
+            <input type="submit" value="Delete Key">
+        </form>
+        <hr>
+        <a href="/admin/list?pw={{pw}}">View All Keys</a>
     """, pw=pw)
 
 @app.route('/admin/delete', methods=['POST'])
@@ -102,7 +93,6 @@ def delete_key():
 
     key = request.form.get("key")
     keys = load_keys()
-
     if key in keys:
         del keys[key]
         save_keys(keys)
@@ -122,5 +112,6 @@ def list_keys():
     html += "</ul>"
     return html
 
+# Optional local testing
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+    app.run(debug=True)
