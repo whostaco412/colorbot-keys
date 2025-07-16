@@ -8,14 +8,12 @@ app = Flask(__name__)
 KEY_FILE = 'keys.json'
 ADMIN_PASSWORD = "LuckyNumber9@18"
 
-# Load keys from file
 def load_keys():
     if not os.path.exists(KEY_FILE):
         return {}
     with open(KEY_FILE, 'r') as f:
         return json.load(f)
 
-# Save keys to file
 def save_keys(keys):
     with open(KEY_FILE, 'w') as f:
         json.dump(keys, f, indent=4)
@@ -39,9 +37,8 @@ def verify():
     if lic["hwid"] != hwid:
         return jsonify({"status": "error", "message": "HWID mismatch"}), 403
 
-    if "expires" in lic:
-        if datetime.utcnow() > datetime.fromisoformat(lic["expires"]):
-            return jsonify({"status": "error", "message": "Key expired"}), 403
+    if "expires" in lic and datetime.utcnow() > datetime.fromisoformat(lic["expires"]):
+        return jsonify({"status": "error", "message": "Key expired"}), 403
 
     return jsonify({"status": "success", "message": "License valid"})
 
@@ -72,7 +69,7 @@ def admin():
             <h3>Add / Update Key</h3>
             Key: <input name="key"><br>
             HWID: <input name="hwid"><br>
-            Expiration (optional ISO): <input name="expires" value="2025-07-30T00:00:00"><br>
+            Expiration (optional ISO): <input name="expires"><br>
             <input type="submit" value="Add Key">
         </form>
         <hr>
@@ -110,10 +107,7 @@ def list_keys():
     for k, v in keys.items():
         html += f"<li><b>{k}</b> - HWID: {v['hwid']} - Expires: {v.get('expires', 'None')}</li>"
     html += "</ul>"
-    html += f'<br><a href="/admin?pw={pw}">Back to Admin Panel</a>'
     return html
 
-# Optional local testing
 if __name__ == '__main__':
     app.run(debug=True)
-
