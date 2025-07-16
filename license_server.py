@@ -8,14 +8,14 @@ app = Flask(__name__)
 KEY_FILE = 'keys.json'
 ADMIN_PASSWORD = "LuckyNumber9@18"
 
-# Load keys
+# Load keys from file
 def load_keys():
     if not os.path.exists(KEY_FILE):
         return {}
     with open(KEY_FILE, 'r') as f:
         return json.load(f)
 
-# Save keys
+# Save keys to file
 def save_keys(keys):
     with open(KEY_FILE, 'w') as f:
         json.dump(keys, f, indent=4)
@@ -40,8 +40,12 @@ def verify():
         return jsonify({"status": "error", "message": "HWID mismatch"}), 403
 
     if "expires" in lic:
-        if datetime.utcnow() > datetime.fromisoformat(lic["expires"]):
-            return jsonify({"status": "error", "message": "Key expired"}), 403
+        try:
+            expiry = datetime.fromisoformat(lic["expires"])
+            if datetime.utcnow() > expiry:
+                return jsonify({"status": "error", "message": "Key expired"}), 403
+        except ValueError:
+            return jsonify({"status": "error", "message": "Invalid expiration date format"}), 400
 
     return jsonify({"status": "success", "message": "License valid"})
 
@@ -61,6 +65,7 @@ def admin():
 
         keys = load_keys()
         keys[key] = {"hwid": hwid}
+
         if expires:
             keys[key]["expires"] = expires
 
@@ -76,12 +81,15 @@ def admin():
         Expiration (optional ISO): <input name="expires" value="2025-07-30T00:00:00"><br>
         <input type="submit" value="Add Key">
     </form>
+
     <hr>
+
     <form action="/admin/delete?pw={{pw}}" method="post">
         <h3>Delete Key</h3>
         Key to Delete: <input name="key"><br>
         <input type="submit" value="Delete Key">
     </form>
+
     <hr>
     <a href="/admin/list?pw={{pw}}">View All Keys</a>
     """, pw=pw)
@@ -115,5 +123,4 @@ def list_keys():
     return html
 
 if __name__ == '__main__':
-    # ✅ Important: bind to 0.0.0.0 and use environment port for Render
     app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
