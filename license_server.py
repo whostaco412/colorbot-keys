@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 import json
 import os
 from datetime import datetime
@@ -6,67 +6,63 @@ from datetime import datetime
 app = Flask(__name__)
 
 LICENSE_FILE = "licenses.json"
-ADMIN_TOKEN = "LuckyNumber905162001"  # 🔐 Change this to something secure
 
+# Load licenses from file
 def load_licenses():
-    if not os.path.exists(LICENSE_FILE):
-        return {}
-    with open(LICENSE_FILE, "r") as f:
-        return json.load(f)
+    if os.path.exists(LICENSE_FILE):
+        with open(LICENSE_FILE, "r") as f:
+            return json.load(f)
+    return []
 
-def save_licenses(licenses):
+# Save licenses to file
+def save_licenses(data):
     with open(LICENSE_FILE, "w") as f:
-        json.dump(licenses, f, indent=4)
+        json.dump(data, f, indent=2)
 
-def is_expired(expiration):
-    if not expiration:
-        return False
-    return datetime.utcnow() > datetime.strptime(expiration, "%Y-%m-%d")
-
+# Route: License Validation
 @app.route("/verify", methods=["POST"])
-def verify_key():
-    key = request.json.get("key")
+def verify():
+    data = request.get_json()
+    hwid = data.get("hwid")
+    key = data.get("key")
     licenses = load_licenses()
-    data = licenses.get(key)
-    if data and not is_expired(data.get("expires")):
-        return jsonify({"valid": True})
-    return jsonify({"valid": False})
 
-@app.route("/admin/keys", methods=["GET"])
-def get_keys():
-    if request.args.get("token") != ADMIN_TOKEN:
-        return jsonify({"error": "Unauthorized"}), 403
-    return jsonify(load_licenses())
+    for lic in licenses:
+        if lic["key"] == key and lic["hwid"] == hwid:
+            expires = lic.get("expires")
+            if expires:
+                if datetime.utcnow() > datetime.fromisoformat(expires):
+                    return jsonify({"valid": False, "reason": "expired"})
+            return jsonify({"valid": True})
 
-@app.route("/admin/add", methods=["POST"])
-def add_key():
-    if request.args.get("token") != ADMIN_TOKEN:
-        return jsonify({"error": "Unauthorized"}), 403
+    return jsonify({"valid": False, "reason": "invalid"})
 
-    key = request.json.get("key")
-    expires = request.json.get("expires")  # Format: "YYYY-MM-DD"
-    licenses = load_licenses()
-    licenses[key] = {"expires": expires}
-    save_licenses(licenses)
-    return jsonify({"status": "added"})
+# Route: Admin Page
+@app.route("/admin", methods=["GET", "POST"])
+def admin():
+    if request.method == "POST":
+        key = request.form["key"]
+        hwid = request.form["hwid"]
+        expires = request.form.get("expires", "")
 
-@app.route("/admin/delete", methods=["POST"])
-def delete_key():
-    if request.args.get("token") != ADMIN_TOKEN:
-        return jsonify({"error": "Unauthorized"}), 403
-
-    key = request.json.get("key")
-    licenses = load_licenses()
-    if key in licenses:
-        del licenses[key]
+        licenses = load_licenses()
+        licenses.append({
+            "key": key,
+            "hwid": hwid,
+            "expires": expires if expires else None
+        })
         save_licenses(licenses)
-        return jsonify({"status": "deleted"})
-    return jsonify({"status": "not found"})
 
+    return render_template_string("""
+        <h2>License Admin Panel</h2>
+        <form method="post">
+            <label>Key: <input name="key"></label><br>
+            <label>HWID: <input name="hwid"></label><br>
+            <label>Expiration (optional ISO): <input name="expires" placeholder="2025-07-30T00:00:00"></label><br>
+            <button type="submit">Add Key</button>
+        </form>
+    """)
+
+# Run the server
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
-# For Railway / gunicorn to recognize this app
-# DO NOT REMOVE THIS
-app = app
-
