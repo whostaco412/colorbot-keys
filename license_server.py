@@ -102,6 +102,7 @@ def list_keys():
     if pw != ADMIN_PASSWORD:
         return "Unauthorized", 401
 
+    print(f"[ADMIN] List accessed with pw={pw}")
     keys = load_keys()
     html = "<h2>All License Keys</h2><ul>"
     for k, v in keys.items():
@@ -109,8 +110,5 @@ def list_keys():
     html += "</ul>"
     return html
 
-if __name__ == '__main__':
-    app.run(debug=True)
-
-print(f"[ADMIN] List accessed with pw={pw}")
-
+# Expose app to gunicorn
+app = app
