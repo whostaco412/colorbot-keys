@@ -110,8 +110,10 @@ def list_keys():
     for k, v in keys.items():
         html += f"<li><b>{k}</b> - HWID: {v['hwid']} - Expires: {v.get('expires', 'None')}</li>"
     html += "</ul>"
+    html += f'<br><a href="/admin?pw={pw}">Back to Admin Panel</a>'
     return html
 
 # Optional local testing
 if __name__ == '__main__':
     app.run(debug=True)
+
