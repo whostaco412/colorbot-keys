@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Key List</title>
+  <style>
+    body {
+      background: #121212;
+      color: #e0e0e0;
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    h2 { color: #64ffda; }
+    li { margin-bottom: 5px; }
+  </style>
+</head>
+<body>
+  <h2>All License Keys</h2>
+  <ul>
+    {% for key, info in keys.items() %}
+      <li><b>{{key}}</b> - HWID: {{info['hwid']}} - Expires: {{info.get('expires', 'None')}}</li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

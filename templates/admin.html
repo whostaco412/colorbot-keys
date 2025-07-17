@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Panel</title>
+  <style>
+    body {
+      background: #121212;
+      color: #e0e0e0;
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    h2 { color: #80cbc4; }
+    input, button {
+      background: #1e1e1e;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      padding: 8px;
+      width: 300px;
+      margin-bottom: 10px;
+    }
+    .box {
+      margin-bottom: 30px;
+      padding: 20px;
+      background: #1c1c1c;
+      border-radius: 8px;
+      box-shadow: 0 0 10px #000;
+    }
+    a {
+      color: #64ffda;
+    }
+  </style>
+</head>
+<body>
+  <h2>🔐 License Admin Panel</h2>
+
+  <div class="box">
+    <h3>➕ Add / Update Key</h3>
+    <form method="post">
+      Key: <input name="key"><br>
+      HWID: <input name="hwid" value="REPLACE_ME"><br>
+      Expiration (UTC ISO): <input name="expires"><br>
+      <button type="submit">Save Key</button>
+    </form>
+  </div>
+
+  <div class="box">
+    <h3>🗑️ Delete Key</h3>
+    <form action="/admin/delete?pw={{pw}}" method="post">
+      Key to delete: <input name="key"><br>
+      <button type="submit">Delete Key</button>
+    </form>
+  </div>
+
+  <a href="/admin/list?pw={{pw}}">📜 View All Keys</a>
+</body>
+</html>
