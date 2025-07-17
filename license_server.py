@@ -53,6 +53,19 @@ def admin_list():
     keys = load_keys()
     return render_template("list.html", keys=keys)
 
+@app.route("/admin/delete", methods=["DELETE"])
+def delete_key():
+    pw = request.args.get("pw", "")
+    if pw != ADMIN_PASSWORD:
+        return "Unauthorized", 403
+    key = request.args.get("key", "")
+    keys = load_keys()
+    if key in keys:
+        del keys[key]
+        save_keys(keys)
+        return "", 204
+    return "Not Found", 404
+
 @app.route("/validate", methods=["POST"])
 def validate():
     data = request.json
@@ -78,4 +91,4 @@ def validate():
     return jsonify({"status": "valid", "expires": record["expiry"]})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=10000)
