@@ -1,26 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Admin Response</title>
-  <style>
-    body {
-      background: #121212;
-      color: #ffffff;
-      font-family: sans-serif;
-      padding: 40px;
-    }
-    .msg {
-      font-size: 20px;
-      color: #00e676;
-    }
-    a {
-      color: #64ffda;
-    }
-  </style>
-</head>
-<body>
-  <div class="msg">{{ message }}</div>
-  <p><a href="/admin?pw=LuckyNumber9@18">← Back to Admin</a></p>
+<html>
+<head><title>Key Created</title></head>
+<body style="background:#111; color:white; font-family:sans-serif;">
+    <h2>✅ Key Created</h2>
+    <p><b>Key:</b> {{ key }}</p>
+    <p><b>HWID:</b> {{ hwid }}</p>
+    <p><b>Expires:</b> {{ expires }}</p>
+    <a href="/admin?pw=LuckyNumber9@18">Back to Admin</a>
 </body>
 </html>

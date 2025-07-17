@@ -109,3 +109,69 @@ def delete_key():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+import hashlib
+import os
+import json
+from datetime import datetime, timedelta
+
+KEY_FILE = "keys.json"
+
+# Load existing keys from file
+def load_keys():
+    if os.path.exists(KEY_FILE):
+        with open(KEY_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+# Save keys to file
+def save_keys(keys):
+    with open(KEY_FILE, "w") as f:
+        json.dump(keys, f, indent=4)
+
+# Generate secure key
+def generate_key():
+    return hashlib.sha256(os.urandom(32)).hexdigest()
+
+# Add new key with predefined expiry option
+def add_new_key(expiry_option="30d", hwid="REPLACE_ME"):
+    days_map = {
+        "30d": 30,
+        "3m": 90,
+        "6m": 180,
+        "1y": 365,
+        "lifetime": None
+    }
+
+    if expiry_option not in days_map:
+        print("❌ Invalid option. Use: 30d, 3m, 6m, 1y, or lifetime")
+        return
+
+    keys = load_keys()
+    new_key = generate_key()
+
+    if days_map[expiry_option] is None:
+        expires = "lifetime"
+    else:
+        expires = (datetime.utcnow() + timedelta(days=days_map[expiry_option])).strftime("%Y-%m-%d")
+
+    keys[new_key] = {
+        "hwid": hwid,
+        "expires": expires
+    }
+
+    save_keys(keys)
+    print(f"✅ New key added:\nKEY: {new_key}\nHWID: {hwid}\nEXPIRES: {expires}")
+    return new_key
+
+# ----------------------------
+# Example usage
+# ----------------------------
+if __name__ == "__main__":
+    # Choose one of: "30d", "3m", "6m", "1y", "lifetime"
+    add_new_key("30d")        # 30 days
+    # add_new_key("3m")       # 3 months
+    # add_new_key("6m")       # 6 months
+    # add_new_key("1y")       # 1 year
+    # add_new_key("lifetime") # no expiration
+
