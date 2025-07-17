@@ -33,10 +33,8 @@ def verify():
 
     if not lic:
         return jsonify({"status": "error", "message": "Invalid key"}), 403
-
     if lic["hwid"] != hwid:
         return jsonify({"status": "error", "message": "HWID mismatch"}), 403
-
     if "expires" in lic and datetime.utcnow() > datetime.fromisoformat(lic["expires"]):
         return jsonify({"status": "error", "message": "Key expired"}), 403
 
@@ -102,7 +100,6 @@ def list_keys():
     if pw != ADMIN_PASSWORD:
         return "Unauthorized", 401
 
-    print(f"[ADMIN] List accessed with pw={pw}")
     keys = load_keys()
     html = "<h2>All License Keys</h2><ul>"
     for k, v in keys.items():
@@ -110,5 +107,5 @@ def list_keys():
     html += "</ul>"
     return html
 
-# Expose app to gunicorn
+# Required for gunicorn
 app = app
