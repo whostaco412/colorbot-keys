@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect
+from flask import Flask, request, jsonify, render_template
 from datetime import datetime, timedelta
 import hashlib
 import os
@@ -31,6 +31,7 @@ def admin():
     pw = request.args.get("pw", "")
     if pw != ADMIN_PASSWORD:
         return "Unauthorized", 403
+
     if request.method == "POST":
         key = generate_key()
         hwid = request.form.get("hwid", "REPLACE_ME")
@@ -43,6 +44,7 @@ def admin():
         }
         save_keys(keys)
         return render_template("admin_result.html", key=key, hwid=hwid, expiry=expiry)
+
     return render_template("admin.html")
 
 @app.route("/admin/list")
@@ -53,18 +55,17 @@ def admin_list():
     keys = load_keys()
     return render_template("list.html", keys=keys)
 
-@app.route("/admin/delete", methods=["DELETE"])
-def delete_key():
+@app.route("/admin/delete/<key>", methods=["POST"])
+def admin_delete(key):
     pw = request.args.get("pw", "")
     if pw != ADMIN_PASSWORD:
         return "Unauthorized", 403
-    key = request.args.get("key", "")
     keys = load_keys()
     if key in keys:
         del keys[key]
         save_keys(keys)
-        return "", 204
-    return "Not Found", 404
+        return jsonify({"status": "deleted"})
+    return jsonify({"status": "not found"})
 
 @app.route("/validate", methods=["POST"])
 def validate():
@@ -82,7 +83,7 @@ def validate():
         return jsonify({"status": "invalid", "reason": "Key expired"})
 
     if record["hwid"] == "REPLACE_ME":
-        # First-time use: lock HWID
+        # First use: lock the HWID
         record["hwid"] = hwid
         save_keys(keys)
     elif record["hwid"] != hwid:
@@ -90,5 +91,21 @@ def validate():
 
     return jsonify({"status": "valid", "expires": record["expiry"]})
 
+@app.route("/admin/delete", methods=["POST"])
+def delete_key():
+    pw = request.args.get("pw", "")
+    if pw != ADMIN_PASSWORD:
+        return "Unauthorized", 403
+
+    key_to_delete = request.form.get("key", "")
+    keys = load_keys()
+
+    if key_to_delete in keys:
+        del keys[key_to_delete]
+        save_keys(keys)
+        return redirect(f"/admin/list?pw={pw}")
+    return "Key not found", 404
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(debug=True)

@@ -1,25 +1,71 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Key List</title>
   <style>
     body {
-      background: #121212;
-      color: #e0e0e0;
-      font-family: sans-serif;
-      padding: 20px;
+      background-color: #121212;
+      color: #ffffff;
+      font-family: 'Segoe UI', sans-serif;
+      margin: 20px;
     }
-    h2 { color: #64ffda; }
-    li { margin-bottom: 5px; }
+    h1 {
+      color: #00ffff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background-color: #1e1e1e;
+    }
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid #333;
+      text-align: left;
+    }
+    th {
+      background-color: #2a2a2a;
+    }
+    .delete-button {
+      background-color: #ff4d4d;
+      border: none;
+      color: white;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .delete-button:hover {
+      background-color: #e60000;
+    }
+    .button-container {
+      text-align: right;
+    }
   </style>
 </head>
 <body>
-  <h2>All License Keys</h2>
-  <ul>
+  <h1>Active License Keys</h1>
+  <table>
+    <tr>
+      <th>Key</th>
+      <th>HWID</th>
+      <th>Expiry</th>
+      <th>Action</th>
+    </tr>
     {% for key, info in keys.items() %}
-      <li><b>{{key}}</b> - HWID: {{info['hwid']}} - Expires: {{info.get('expires', 'None')}}</li>
+    <tr>
+      <td>{{ key }}</td>
+      <td>{{ info.hwid }}</td>
+      <td>{{ info.expiry }}</td>
+      <td class="button-container">
+        <form method="POST" action="/admin/delete?pw={{ request.args.get('pw') }}">
+          <input type="hidden" name="key" value="{{ key }}">
+          <button class="delete-button" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
     {% endfor %}
-  </ul>
+  </table>
 </body>
 </html>
+
