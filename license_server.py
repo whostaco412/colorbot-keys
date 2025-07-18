@@ -1,101 +1,167 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template_string, redirect
 from datetime import datetime, timedelta
-import hashlib
-import os
 import json
+import os
 
 app = Flask(__name__)
 
-KEY_FILE = "keys.json"
+KEY_FILE = 'keys.json'
 ADMIN_PASSWORD = "LuckyNumber9@18"
 
+# Load keys from file
 def load_keys():
-    if os.path.exists(KEY_FILE):
-        with open(KEY_FILE, "r") as f:
-            return json.load(f)
-    return {}
+    if not os.path.exists(KEY_FILE):
+        return {}
+    with open(KEY_FILE, 'r') as f:
+        return json.load(f)
 
+# Save keys to file
 def save_keys(keys):
-    with open(KEY_FILE, "w") as f:
+    with open(KEY_FILE, 'w') as f:
         json.dump(keys, f, indent=4)
 
-def generate_key():
-    return hashlib.sha256(os.urandom(32)).hexdigest()
-
-@app.route("/")
-def home():
+@app.route('/')
+def index():
     return "License server is running."
 
-@app.route("/admin", methods=["GET", "POST"])
-def admin():
-    pw = request.args.get("pw", "")
-    if pw != ADMIN_PASSWORD:
-        return "Unauthorized", 403
-
-    if request.method == "POST":
-        key = generate_key()
-        hwid = request.form.get("hwid", "REPLACE_ME")
-        days = int(request.form.get("days", 30))
-        expiry = (datetime.utcnow() + timedelta(days=days)).strftime("%Y-%m-%d")
-        keys = load_keys()
-        keys[key] = {
-            "hwid": hwid,
-            "expires": expiry
-        }
-        save_keys(keys)
-        return render_template("admin_result.html", key=key, hwid=hwid, expiry=expiry)
-
-    return render_template("admin.html")
-
-@app.route("/admin/list")
-def admin_list():
-    pw = request.args.get("pw", "")
-    if pw != ADMIN_PASSWORD:
-        return "Unauthorized", 403
-    keys = load_keys()
-    return render_template("list.html", keys=keys)
-
-@app.route("/admin/delete", methods=["POST"])
-def admin_delete():
-    pw = request.args.get("pw", "")
-    if pw != ADMIN_PASSWORD:
-        return "Unauthorized", 403
-    key_to_delete = request.form.get("key", "")
-    keys = load_keys()
-    if key_to_delete in keys:
-        del keys[key_to_delete]
-        save_keys(keys)
-        return "Key deleted."
-    return "Key not found."
-
-@app.route("/verify", methods=["POST"])
+@app.route('/verify', methods=['POST'])
 def verify():
     data = request.json
-    key = data.get("key", "")
-    hwid = data.get("hwid", "")
+    key = data.get("key")
+    hwid = data.get("hwid")
+
     keys = load_keys()
+    lic = keys.get(key)
 
-    if key not in keys:
-        return jsonify({"valid": False, "reason": "Key not found"})
+    if not lic:
+        return jsonify({"status": "error", "message": "Invalid key"}), 403
 
-    record = keys[key]
-    expiry = record.get("expires", "")
-
-    if expiry != "lifetime":
+    # Check expiration
+    expiry = lic.get("expiry")
+    if expiry:
         try:
-            expiry_date = datetime.strptime(expiry, "%Y-%m-%d")
-            if expiry_date < datetime.utcnow():
-                return jsonify({"valid": False, "reason": "Expired"})
-        except ValueError:
-            return jsonify({"valid": False, "reason": "Invalid expiry format"})
+            if datetime.strptime(expiry, "%Y-%m-%d") < datetime.today():
+                return jsonify({"status": "error", "message": "Key expired"}), 403
+        except:
+            return jsonify({"status": "error", "message": "Invalid expiry format"}), 403
 
-    if record["hwid"] == "REPLACE_ME":
-        record["hwid"] = hwid
+    # Auto-bind HWID if not set
+    if lic["hwid"] == "REPLACE_ME":
+        lic["hwid"] = hwid
         save_keys(keys)
-    elif record["hwid"] != hwid:
-        return jsonify({"valid": False, "reason": "HWID mismatch"})
+    elif lic["hwid"] != hwid:
+        return jsonify({"status": "error", "message": "HWID mismatch"}), 403
 
     return jsonify({"valid": True})
 
-if __name__ == "__main__":
+@app.route('/admin/list')
+def admin_list():
+    password = request.args.get("pw")
+    if password != ADMIN_PASSWORD:
+        return "Access denied", 403
+
+    keys = load_keys()
+    html = """
+    <html>
+    <head>
+        <title>License Admin</title>
+        <style>
+            body { background-color: #111; color: #0ff; font-family: monospace; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 10px; border: 1px solid #444; }
+            th { background-color: #222; }
+            td { background-color: #000; color: #ccc; }
+            .delete { color: red; }
+            .create-form { margin-top: 30px; }
+        </style>
+    </head>
+    <body>
+        <h1>Active License Keys</h1>
+        <table>
+            <tr><th>Key</th><th>HWID</th><th>Expiry</th><th>Action</th></tr>
+            {% for key, info in keys.items() %}
+            <tr>
+                <td>{{ key }}</td>
+                <td>{{ info["hwid"] }}</td>
+                <td>{{ info.get("expiry", "None") }}</td>
+                <td><a href="/admin/delete?pw={{ pw }}&key={{ key }}" class="delete">Delete</a></td>
+            </tr>
+            {% endfor %}
+        </table>
+
+        <div class="create-form">
+            <h2>Create New Key</h2>
+            <form action="/admin/create" method="post">
+                <input type="hidden" name="pw" value="{{ pw }}">
+                Key: <input type="text" name="key" required>
+                <br><br>
+                Duration:
+                <select name="preset">
+                    <option value="">-- Select Duration --</option>
+                    <option value="30">30 Days</option>
+                    <option value="60">60 Days</option>
+                    <option value="90">90 Days</option>
+                    <option value="180">6 Months</option>
+                    <option value="365">1 Year</option>
+                    <option value="lifetime">Lifetime</option>
+                </select>
+                <br><br>
+                OR Manual Expiry (YYYY-MM-DD): <input type="text" name="expiry">
+                <br><br>
+                <input type="submit" value="Add Key">
+            </form>
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html, keys=keys, pw=password)
+
+@app.route('/admin/create', methods=['POST'])
+def create_key():
+    password = request.form.get("pw")
+    if password != ADMIN_PASSWORD:
+        return "Access denied", 403
+
+    key = request.form.get("key")
+    manual_expiry = request.form.get("expiry")
+    preset = request.form.get("preset")
+
+    expiry = None
+
+    if preset and preset != "lifetime":
+        try:
+            days = int(preset)
+            expiry_date = datetime.today().date() + timedelta(days=days)
+            expiry = expiry_date.strftime("%Y-%m-%d")
+        except:
+            expiry = None
+    elif preset == "lifetime":
+        expiry = None
+    elif manual_expiry:
+        expiry = manual_expiry
+
+    keys = load_keys()
+    keys[key] = {
+        "hwid": "REPLACE_ME",
+        "expiry": expiry
+    }
+    save_keys(keys)
+    return redirect(f"/admin/list?pw={password}")
+
+@app.route('/admin/delete')
+def delete_key():
+    password = request.args.get("pw")
+    key = request.args.get("key")
+
+    if password != ADMIN_PASSWORD:
+        return "Access denied", 403
+
+    keys = load_keys()
+    if key in keys:
+        del keys[key]
+        save_keys(keys)
+
+    return redirect(f"/admin/list?pw={password}")
+
+if __name__ == '__main__':
     app.run(debug=True)
