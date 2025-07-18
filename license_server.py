@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify, render_template_string, redirect
 from datetime import datetime, timedelta
 import json
 import os
+import secrets
 
 app = Flask(__name__)
 
@@ -20,6 +21,10 @@ def save_keys(keys):
     with open(KEY_FILE, 'w') as f:
         json.dump(keys, f, indent=4)
 
+# Generate 64-character random license key
+def generate_key():
+    return secrets.token_hex(32)
+
 @app.route('/')
 def index():
     return "License server is running."
@@ -36,7 +41,6 @@ def verify():
     if not lic:
         return jsonify({"status": "error", "message": "Invalid key"}), 403
 
-    # Check expiration
     expiry = lic.get("expiry")
     if expiry:
         try:
@@ -45,7 +49,6 @@ def verify():
         except:
             return jsonify({"status": "error", "message": "Invalid expiry format"}), 403
 
-    # Auto-bind HWID if not set
     if lic["hwid"] == "REPLACE_ME":
         lic["hwid"] = hwid
         save_keys(keys)
@@ -93,7 +96,8 @@ def admin_list():
             <h2>Create New Key</h2>
             <form action="/admin/create" method="post">
                 <input type="hidden" name="pw" value="{{ pw }}">
-                Key: <input type="text" name="key" required>
+                Key: <input type="text" name="key" id="keyInput" required>
+                <button type="button" onclick="generateKey()">Generate</button>
                 <br><br>
                 Duration:
                 <select name="preset">
@@ -110,11 +114,31 @@ def admin_list():
                 <br><br>
                 <input type="submit" value="Add Key">
             </form>
+
+            <script>
+                function generateKey() {
+                    fetch('/admin/genkey?pw={{ pw }}')
+                        .then(response => response.text())
+                        .then(key => document.getElementById('keyInput').value = key);
+                }
+            </script>
         </div>
     </body>
     </html>
     """
     return render_template_string(html, keys=keys, pw=password)
+
+@app.route('/admin/genkey')
+def genkey():
+    password = request.args.get("pw")
+    if password != ADMIN_PASSWORD:
+        return "Access denied", 403
+
+    keys = load_keys()
+    while True:
+        key = generate_key()
+        if key not in keys:
+            return key
 
 @app.route('/admin/create', methods=['POST'])
 def create_key():
