@@ -7,11 +7,12 @@ import string
 
 app = Flask(__name__)
 
-KEY_FILE = 'keys.json'
+# Absolute path to ensure keys.json always saves/loads correctly
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+KEY_FILE = os.path.join(BASE_DIR, 'keys.json')
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "defaultpass")
 
 
-# Load keys from file
 def load_keys():
     if not os.path.exists(KEY_FILE):
         return {}
@@ -19,18 +20,16 @@ def load_keys():
         return json.load(f)
 
 
-# Save keys to file
 def save_keys(keys):
     with open(KEY_FILE, 'w') as f:
         json.dump(keys, f, indent=4)
+    print("[DEBUG] Keys saved to", KEY_FILE)
 
 
-# Generate a random license key
 def generate_key():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=64))
 
 
-# Calculate expiration date
 def calc_expiration(option):
     now = datetime.utcnow()
     durations = {
@@ -63,14 +62,14 @@ def verify():
     if not lic:
         return jsonify({"valid": False, "reason": "Invalid key"}), 403
 
-    # Auto-bind HWID if unset or marked as REPLACE_ME
-    if not lic.get("hwid") or lic.get("hwid") == "REPLACE_ME":
+    # Auto-bind HWID
+    if not lic.get("hwid") or lic["hwid"] == "REPLACE_ME":
         lic["hwid"] = hwid
         save_keys(keys)
     elif lic["hwid"] != hwid:
         return jsonify({"valid": False, "reason": "HWID mismatch"}), 403
 
-    # Check expiration
+    # Expiration check
     if lic["expires"] != "lifetime":
         try:
             if datetime.utcnow() > datetime.fromisoformat(lic["expires"]):
@@ -113,9 +112,7 @@ def admin_list():
     <table><tr><th>Key</th><th>HWID</th><th>Expires</th><th>Action</th></tr>
     """
     for k, v in keys.items():
-        hwid = v.get("hwid", "")
-        expires = v.get("expires", "")
-        html += f"<tr><td>{k}</td><td>{hwid}</td><td>{expires}</td><td><a href='/admin/delete/{k}?pw={ADMIN_PASSWORD}'>Delete</a></td></tr>"
+        html += f"<tr><td>{k}</td><td>{v.get('hwid', '')}</td><td>{v.get('expires', '')}</td><td><a href='/admin/delete/{k}?pw={ADMIN_PASSWORD}'>Delete</a></td></tr>"
     html += "</table></body></html>"
     return html
 
@@ -127,12 +124,12 @@ def admin_add():
 
     duration = request.form.get('type', '30d')
     key = generate_key()
-    hwid = "REPLACE_ME"
     expires = calc_expiration(duration)
 
     keys = load_keys()
-    keys[key] = {"hwid": hwid, "expires": expires}
+    keys[key] = {"hwid": "REPLACE_ME", "expires": expires}
     save_keys(keys)
+    print(f"[DEBUG] Generated key {key} ({duration})")
     return redirect(f"/admin/list?pw={ADMIN_PASSWORD}")
 
 
@@ -145,6 +142,7 @@ def admin_delete(key):
     if key in keys:
         del keys[key]
         save_keys(keys)
+        print(f"[DEBUG] Deleted key {key}")
     return redirect(f"/admin/list?pw={ADMIN_PASSWORD}")
 
 
