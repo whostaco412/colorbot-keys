@@ -2,14 +2,14 @@ from flask import Flask, request, jsonify, render_template_string, redirect
 from datetime import datetime, timedelta
 import os
 import json
-import uuid
 import random
 import string
 
 app = Flask(__name__)
 
 KEY_FILE = 'keys.json'
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "defaultpass")  # <-- updated line
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "defaultpass")
+
 
 # Load keys from file
 def load_keys():
@@ -18,58 +18,68 @@ def load_keys():
     with open(KEY_FILE, 'r') as f:
         return json.load(f)
 
+
 # Save keys to file
 def save_keys(keys):
     with open(KEY_FILE, 'w') as f:
         json.dump(keys, f, indent=4)
 
+
 # Generate a random license key
 def generate_key():
     return ''.join(random.choices(string.ascii_lowercase + string.digits, k=64))
 
+
 # Calculate expiration date
 def calc_expiration(option):
     now = datetime.utcnow()
-    if option == '30d':
-        return (now + timedelta(days=30)).isoformat()
-    elif option == '60d':
-        return (now + timedelta(days=60)).isoformat()
-    elif option == '90d':
-        return (now + timedelta(days=90)).isoformat()
-    elif option == '6mo':
-        return (now + timedelta(days=182)).isoformat()
-    elif option == '1yr':
-        return (now + timedelta(days=365)).isoformat()
-    elif option == 'lifetime':
-        return "lifetime"
-    else:
-        return (now + timedelta(days=30)).isoformat()
+    durations = {
+        '30d': timedelta(days=30),
+        '60d': timedelta(days=60),
+        '90d': timedelta(days=90),
+        '6mo': timedelta(days=182),
+        '1yr': timedelta(days=365),
+        'lifetime': None
+    }
+    if option == 'lifetime':
+        return 'lifetime'
+    return (now + durations.get(option, timedelta(days=30))).isoformat()
+
 
 @app.route('/')
 def index():
     return "License server is running."
+
 
 @app.route('/verify', methods=['POST'])
 def verify():
     data = request.json
     key = data.get("key")
     hwid = data.get("hwid")
-    keys = load_keys()
 
+    keys = load_keys()
     lic = keys.get(key)
+
     if not lic:
         return jsonify({"valid": False, "reason": "Invalid key"}), 403
 
-    if lic['hwid'] == "" or lic['hwid'] is None:
-        lic['hwid'] = hwid
-    elif lic['hwid'] != hwid:
+    # Auto-bind HWID if unset or marked as REPLACE_ME
+    if not lic.get("hwid") or lic.get("hwid") == "REPLACE_ME":
+        lic["hwid"] = hwid
+        save_keys(keys)
+    elif lic["hwid"] != hwid:
         return jsonify({"valid": False, "reason": "HWID mismatch"}), 403
 
-    if lic['expires'] != "lifetime" and datetime.utcnow() > datetime.fromisoformat(lic['expires']):
-        return jsonify({"valid": False, "reason": "Key expired"}), 403
+    # Check expiration
+    if lic["expires"] != "lifetime":
+        try:
+            if datetime.utcnow() > datetime.fromisoformat(lic["expires"]):
+                return jsonify({"valid": False, "reason": "Key expired"}), 403
+        except Exception:
+            return jsonify({"valid": False, "reason": "Invalid expiration format"}), 403
 
-    save_keys(keys)
     return jsonify({"valid": True})
+
 
 @app.route('/admin/list')
 def admin_list():
@@ -103,9 +113,12 @@ def admin_list():
     <table><tr><th>Key</th><th>HWID</th><th>Expires</th><th>Action</th></tr>
     """
     for k, v in keys.items():
-        html += f"<tr><td>{k}</td><td>{v['hwid']}</td><td>{v['expires']}</td><td><a href='/admin/delete/{k}?pw={ADMIN_PASSWORD}'>Delete</a></td></tr>"
+        hwid = v.get("hwid", "")
+        expires = v.get("expires", "")
+        html += f"<tr><td>{k}</td><td>{hwid}</td><td>{expires}</td><td><a href='/admin/delete/{k}?pw={ADMIN_PASSWORD}'>Delete</a></td></tr>"
     html += "</table></body></html>"
     return html
+
 
 @app.route('/admin/add', methods=['POST'])
 def admin_add():
@@ -114,13 +127,14 @@ def admin_add():
 
     duration = request.form.get('type', '30d')
     key = generate_key()
-    hwid = ""
+    hwid = "REPLACE_ME"
     expires = calc_expiration(duration)
 
     keys = load_keys()
     keys[key] = {"hwid": hwid, "expires": expires}
     save_keys(keys)
     return redirect(f"/admin/list?pw={ADMIN_PASSWORD}")
+
 
 @app.route('/admin/delete/<key>')
 def admin_delete(key):
@@ -132,6 +146,7 @@ def admin_delete(key):
         del keys[key]
         save_keys(keys)
     return redirect(f"/admin/list?pw={ADMIN_PASSWORD}")
+
 
 if __name__ == '__main__':
     app.run(debug=True)
