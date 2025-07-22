@@ -1,13 +1,14 @@
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, redirect
 from datetime import datetime
 import json
 import os
+import random
+import string
 
 app = Flask(__name__)
+
 KEY_FILE = 'keys.json'
 ADMIN_PASSWORD = "LuckyNumber9@18"
-
-# ----------------- Utility Functions -----------------
 
 def load_keys():
     if not os.path.exists(KEY_FILE):
@@ -19,11 +20,9 @@ def save_keys(keys):
     with open(KEY_FILE, 'w') as f:
         json.dump(keys, f, indent=4)
 
-# ----------------- Routes -----------------
-
 @app.route('/')
 def index():
-    return "License server is running."
+    return "✅ License server is running."
 
 @app.route('/verify', methods=['POST'])
 def verify():
@@ -31,83 +30,93 @@ def verify():
     key = data.get("key")
     hwid = data.get("hwid")
 
-    keys = load_keys()
-    lic = keys.get(key)
+    if not key or not hwid:
+        return jsonify({"status": "error", "message": "Missing key or HWID"}), 400
 
-    if not lic:
+    keys = load_keys()
+    if key not in keys:
         return jsonify({"status": "error", "message": "Invalid key"}), 403
 
-    # Auto-bind if not bound yet
-    if lic["hwid"] == "REPLACE_ME":
-        lic["hwid"] = hwid
-        save_keys(keys)
-        return jsonify({"status": "success", "message": "HWID bound"}), 200
+    record = keys[key]
 
-    if lic["hwid"] != hwid:
+    if record["hwid"] == "REPLACE_ME":
+        record["hwid"] = hwid  # auto bind
+        save_keys(keys)
+
+    if record["hwid"] != hwid:
         return jsonify({"status": "error", "message": "HWID mismatch"}), 403
 
-    if datetime.now() > datetime.strptime(lic["expires"], "%Y-%m-%d"):
+    if datetime.strptime(record["expires"], "%Y-%m-%d") < datetime.now():
         return jsonify({"status": "error", "message": "Key expired"}), 403
 
-    return jsonify({"status": "success", "message": "Key valid"}), 200
+    return jsonify({"status": "success", "message": "License valid"})
 
 @app.route('/admin/list')
 def admin_list():
-    if request.args.get("pw") != ADMIN_PASSWORD:
-        return "Access denied", 403
+    pw = request.args.get("pw", "")
+    if pw != ADMIN_PASSWORD:
+        return "Access Denied", 403
 
     keys = load_keys()
+    return render_template_string("""
+        <h1>🔐 Admin Panel</h1>
+        <a href="/admin/add?pw={{ pw }}"><button>+ Add Key</button></a>
+        <table border="1" cellspacing="0" cellpadding="6">
+            <tr><th>Key</th><th>HWID</th><th>Expires</th><th>Action</th></tr>
+            {% for k, v in keys.items() %}
+                <tr>
+                    <td>{{ k }}</td>
+                    <td>{{ v['hwid'] }}</td>
+                    <td>{{ v['expires'] }}</td>
+                    <td><a href="/admin/delete/{{ k }}?pw={{ pw }}">Delete</a></td>
+                </tr>
+            {% endfor %}
+        </table>
+    """, keys=keys, pw=pw)
 
-    html = """
-    <h2>🔐 Admin Panel</h2>
-    <form action="/admin/add" method="post">
-        Key: <input name="key">
-        Expire (YYYY-MM-DD): <input name="expires">
-        <button type="submit">Add</button>
-    </form>
-    <table border="1">
-        <tr><th>Key</th><th>HWID</th><th>Expires</th><th>Action</th></tr>
-        {% for k, v in keys.items() %}
-        <tr>
-            <td>{{k}}</td>
-            <td>{{v['hwid']}}</td>
-            <td>{{v['expires']}}</td>
-            <td><a href="/admin/delete?pw={{pw}}&key={{k}}">Delete</a></td>
-        </tr>
-        {% endfor %}
-    </table>
-    """
-    return render_template_string(html, keys=keys, pw=request.args.get("pw"))
-
-@app.route('/admin/add', methods=["POST"])
+@app.route("/admin/add", methods=["GET", "POST"])
 def admin_add():
-    if request.args.get("pw") != ADMIN_PASSWORD:
-        return "Access denied", 403
+    pw = request.args.get("pw", "")
+    if pw != ADMIN_PASSWORD:
+        return "Access Denied", 403
+
+    if request.method == "POST":
+        key = request.form.get("key")
+        expires = request.form.get("expires")
+        if not key:
+            key = ''.join(random.choices(string.ascii_lowercase + string.digits, k=48))
+        keys = load_keys()
+        keys[key] = {
+            "hwid": "REPLACE_ME",
+            "expires": expires
+        }
+        save_keys(keys)
+        return redirect(f"/admin/list?pw={pw}")
+
+    return render_template_string("""
+        <h2>Add New Key</h2>
+        <form method="post">
+            Key (leave blank to auto-generate):<br>
+            <input type="text" name="key"><br><br>
+            Expiration Date (YYYY-MM-DD):<br>
+            <input type="text" name="expires"><br><br>
+            <input type="submit" value="Add Key">
+        </form>
+        <br>
+        <a href="/admin/list?pw={{ pw }}">← Back to List</a>
+    """, pw=pw)
+
+@app.route("/admin/delete/<key>")
+def admin_delete(key):
+    pw = request.args.get("pw", "")
+    if pw != ADMIN_PASSWORD:
+        return "Access Denied", 403
 
     keys = load_keys()
-    key = request.form["key"]
-    expires = request.form["expires"]
-    keys[key] = {
-        "hwid": "REPLACE_ME",
-        "expires": expires
-    }
-    save_keys(keys)
-    return "Key added. <a href='/admin/list?pw=" + ADMIN_PASSWORD + "'>Back</a>"
-
-@app.route('/admin/delete')
-def admin_delete():
-    if request.args.get("pw") != ADMIN_PASSWORD:
-        return "Access denied", 403
-
-    keys = load_keys()
-    key = request.args.get("key")
     if key in keys:
         del keys[key]
         save_keys(keys)
-    return "Key deleted. <a href='/admin/list?pw=" + ADMIN_PASSWORD + "'>Back</a>"
-
-# ----------------- Start App -----------------
+    return redirect(f"/admin/list?pw={pw}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
-
