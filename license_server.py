@@ -1,4 +1,3 @@
-# app.py
 from flask import Flask, request, jsonify, render_template_string, redirect
 from datetime import datetime, timedelta
 import os, json, random, string
@@ -108,5 +107,7 @@ def admin_delete(key):
         save_keys(keys)
     return redirect(f"/admin/list?pw={ADMIN_PASSWORD}")
 
+# 🚀 FIX FOR RENDER HOSTING — use assigned PORT
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))  # Fallback to 10000 locally
+    app.run(host='0.0.0.0', port=port)
