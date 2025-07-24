@@ -32,30 +32,30 @@ def verify():
     hwid = data.get("hwid")
 
     if not key or not hwid:
-        return jsonify({"status": "error", "message": "Missing key or HWID"}), 400
+        return jsonify({"valid": False, "status": "error", "message": "Missing key or HWID"}), 400
 
     keys = load_keys()
     lic = keys.get(key)
 
     if not lic:
-        return jsonify({"status": "error", "message": "Invalid key"}), 403
+        return jsonify({"valid": False, "status": "error", "message": "Invalid key"}), 403
 
-    if lic["hwid"] == "REPLACE_ME":
-        lic["hwid"] = hwid
+    if lic["hwid"] in ["REPLACE_ME", "NOT_SET"]:
+        keys[key]["hwid"] = hwid  # lock key to this HWID
         save_keys(keys)
 
-    if lic["hwid"] != hwid:
-        return jsonify({"status": "error", "message": "HWID mismatch"}), 403
+    if keys[key]["hwid"] != hwid:
+        return jsonify({"valid": False, "status": "error", "message": "HWID mismatch"}), 403
 
-    if lic["expires"]:
+    if keys[key]["expires"]:
         try:
-            exp_date = datetime.strptime(lic["expires"], "%Y-%m-%dT%H:%M:%S")
+            exp_date = datetime.strptime(keys[key]["expires"], "%Y-%m-%dT%H:%M:%S")
             if datetime.utcnow() > exp_date:
-                return jsonify({"status": "error", "message": "License expired"}), 403
+                return jsonify({"valid": False, "status": "error", "message": "License expired"}), 403
         except ValueError:
-            return jsonify({"status": "error", "message": "Invalid expiration date format"}), 500
+            return jsonify({"valid": False, "status": "error", "message": "Invalid expiration date format"}), 500
 
-    return jsonify({"status": "success", "message": "License valid"}), 200
+    return jsonify({"valid": True, "status": "success", "message": "License valid"}), 200
 
 # Admin Panel
 @app.route('/admin/list')
