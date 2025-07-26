@@ -6,7 +6,8 @@ import secrets
 
 app = Flask(__name__)
 
-KEY_FILE = 'keys.json'
+KEY_FILE = '/mnt/data/keys.json'
+
 ADMIN_PASSWORD = "LuckyNumber9@18"
 
 # Load and save functions
